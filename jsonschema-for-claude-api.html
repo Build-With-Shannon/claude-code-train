@@ -1,0 +1,1707 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JSON Schema, by way of the Claude API</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fafaf7;
+    --ink: #1a1a1a;
+    --ink-soft: #4b4b4b;
+    --muted: #8a8a8a;
+    --rule: #e6e4dc;
+    --accent: #6d28d9;
+    --accent-soft: #ede9fe;
+    --accent-deep: #4c1d95;
+    --code-bg: #14121f;
+    --code-ink: #e8e6f0;
+    --code-muted: #8b85a8;
+    --code-key: #c4b5fd;
+    --code-str: #86efac;
+    --code-num: #fcd34d;
+    --code-com: #6b7280;
+    --good: #047857;
+    --good-soft: #ecfdf5;
+    --bad: #b91c1c;
+    --bad-soft: #fef2f2;
+    --warn: #b45309;
+    --warn-soft: #fffbeb;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 64px 40px 120px;
+  }
+
+  /* ---- header ---- */
+  .eyebrow {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  h1 {
+    font-family: "Fraunces", serif;
+    font-weight: 800;
+    font-size: clamp(40px, 5.5vw, 64px);
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    margin: 0 0 20px;
+  }
+  h1 em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--accent);
+  }
+  .lede {
+    font-family: "Fraunces", serif;
+    font-size: 22px;
+    line-height: 1.45;
+    color: var(--ink-soft);
+    max-width: 760px;
+    margin: 0 0 48px;
+  }
+
+  /* ---- status bar ---- */
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: white;
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--accent);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    margin-bottom: 48px;
+  }
+  .status .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+  }
+  .status.loading .dot { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  .status.ready .dot { background: var(--good); }
+  .status.error .dot { background: var(--bad); }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.3); }
+  }
+
+  /* ---- section structure ---- */
+  section { margin-bottom: 88px; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 24px;
+    margin-bottom: 28px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .section-num {
+    font-family: "Fraunces", serif;
+    font-size: 56px;
+    font-weight: 400;
+    font-style: italic;
+    color: var(--accent);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    min-width: 80px;
+  }
+  .section-title {
+    font-family: "Fraunces", serif;
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .section-sub {
+    color: var(--ink-soft);
+    font-size: 15px;
+    margin: 2px 0 0;
+  }
+  section p { max-width: 760px; }
+  section h3 {
+    font-family: "Fraunces", serif;
+    font-size: 22px;
+    font-weight: 600;
+    margin: 32px 0 12px;
+  }
+
+  /* ---- code blocks ---- */
+  pre, code {
+    font-family: "JetBrains Mono", monospace;
+  }
+  p code, li code, td code {
+    background: var(--accent-soft);
+    color: var(--accent-deep);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.92em;
+  }
+  pre.code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 22px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.7;
+    overflow-x: auto;
+    margin: 16px 0;
+  }
+  pre.code .k { color: var(--code-key); }
+  pre.code .s { color: var(--code-str); }
+  pre.code .n { color: var(--code-num); }
+  pre.code .c { color: var(--code-com); font-style: italic; }
+
+  /* ---- demo grid ---- */
+  .demo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin: 20px 0 0;
+  }
+  @media (max-width: 800px) {
+    .demo-grid { grid-template-columns: 1fr; }
+  }
+  .demo-grid.single { grid-template-columns: 1fr; }
+  .editor-shell {
+    background: var(--code-bg);
+    border-radius: 6px;
+    padding: 16px 18px;
+    position: relative;
+  }
+  .editor-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--code-muted);
+    margin-bottom: 8px;
+  }
+  .editor-shell textarea {
+    width: 100%;
+    background: transparent;
+    color: var(--code-ink);
+    border: none;
+    outline: none;
+    resize: vertical;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    min-height: 140px;
+  }
+
+  /* ---- toolbar / buttons ---- */
+  .demo-toolbar {
+    display: flex;
+    gap: 10px;
+    margin: 18px 0 0;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  button {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 9px 18px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  button.primary {
+    background: var(--accent);
+    color: white;
+  }
+  button.primary:hover { background: var(--accent-deep); }
+  button.primary:disabled {
+    background: var(--muted);
+    cursor: not-allowed;
+  }
+  button.ghost {
+    background: transparent;
+    color: var(--ink-soft);
+    border: 1px solid var(--rule);
+  }
+  button.ghost:hover { border-color: var(--ink-soft); color: var(--ink); }
+  .demo-hint {
+    margin-left: auto;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .demo-hint.invalid { color: var(--bad); }
+
+  /* ---- result panes ---- */
+  .result-pane {
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 20px 22px;
+    margin-top: 20px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .result-pane .empty { color: var(--muted); font-style: italic; }
+  .result-pane.success { border-left: 4px solid var(--good); }
+  .result-pane.failure { border-left: 4px solid var(--bad); }
+  .result-pane.api { border-left: 4px solid var(--accent); }
+  .result-head {
+    font-weight: 700;
+    margin-bottom: 12px;
+    font-size: 14px;
+  }
+  .result-pane.success .result-head { color: var(--good); }
+  .result-pane.failure .result-head { color: var(--bad); }
+  .result-pane.api .result-head { color: var(--accent); }
+  .err-row {
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .err-row:last-child { border-bottom: none; }
+  .err-path {
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .err-msg {
+    color: var(--ink-soft);
+    display: block;
+    margin-top: 2px;
+  }
+  .err-meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ---- callouts ---- */
+  .callout {
+    background: white;
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--accent);
+    padding: 18px 22px;
+    margin: 24px 0;
+    font-size: 15px;
+    color: var(--ink-soft);
+  }
+  .callout strong { color: var(--ink); }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .callout.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+
+  /* ---- mode panel (sticky-ish, prominent) ---- */
+  .mode-panel {
+    background: white;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    padding: 24px 26px;
+    margin: 32px 0 48px;
+  }
+  .mode-panel-head {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  .mode-panel h3 {
+    font-family: "Fraunces", serif;
+    font-size: 22px;
+    margin: 0 0 12px;
+  }
+  .mode-toggle {
+    display: inline-flex;
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 4px;
+    margin: 14px 0 18px;
+  }
+  .mode-toggle button {
+    background: transparent;
+    color: var(--ink-soft);
+    padding: 8px 18px;
+    font-size: 13px;
+    font-family: "JetBrains Mono", monospace;
+    letter-spacing: 0.04em;
+  }
+  .mode-toggle button.active {
+    background: var(--accent);
+    color: white;
+  }
+  .key-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .key-row input, .key-row select {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    padding: 9px 12px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: white;
+    color: var(--ink);
+    outline: none;
+  }
+  .key-row input { flex: 1; min-width: 280px; }
+  .key-row input:focus, .key-row select:focus { border-color: var(--accent); }
+  .key-hint {
+    font-size: 12px;
+    color: var(--warn);
+    margin-top: 10px;
+    font-family: "JetBrains Mono", monospace;
+  }
+  .key-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    margin-left: 8px;
+  }
+  .key-status .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .key-status.set { color: var(--good); }
+  .key-status.set .dot { background: var(--good); }
+  .key-status.unset { color: var(--muted); }
+  .key-status.unset .dot { background: var(--muted); }
+
+  .hidden { display: none !important; }
+
+  /* ---- chips / tags ---- */
+  .chip {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .chip.live { background: var(--accent-soft); color: var(--accent-deep); }
+  .chip.sim { background: var(--bg); color: var(--ink-soft); border: 1px solid var(--rule); }
+
+  /* ---- tables ---- */
+  table.basic {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 20px 0;
+    font-size: 14px;
+  }
+  table.basic th, table.basic td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+  }
+  table.basic th {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 500;
+    font-family: "JetBrains Mono", monospace;
+  }
+  table.basic tr:last-child td { border-bottom: none; }
+  table.basic td code { font-size: 13px; }
+
+  /* ---- collapsibles ---- */
+  details {
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    margin-top: 14px;
+  }
+  details summary {
+    padding: 14px 20px;
+    cursor: pointer;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+    user-select: none;
+  }
+  details summary::marker { color: var(--accent); }
+  details[open] summary { border-bottom: 1px solid var(--rule); }
+  details .body { padding: 18px 20px 20px; }
+
+  /* ---- footer ---- */
+  footer {
+    margin-top: 80px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+  .further-reading {
+    list-style: none;
+    padding: 0;
+    margin: 20px 0;
+  }
+  .further-reading li {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .further-reading li:last-child { border-bottom: none; }
+  .further-reading a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+  }
+  .further-reading a:hover { text-decoration: underline; }
+  .further-reading .desc {
+    font-size: 14px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="eyebrow">A teaching primer // JSON Schema by way of the Claude API</div>
+  <h1>You can't ship an AI app <em>without it.</em></h1>
+  <p class="lede">JSON Schema is the contract you give Claude so the model's output is shaped like your code expects. Read on, then click around. By the end, you'll have a tool-use schema ready to wire into your own app.</p>
+
+  <div id="status" class="status loading">
+    <div class="dot"></div>
+    <span id="status-text">Booting Python (Pyodide)…</span>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- 00 - Hook                                                      -->
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">00</div>
+      <div>
+        <h2 class="section-title">Why schemas matter for LLMs</h2>
+        <p class="section-sub">The model is non-deterministic. Your code isn't.</p>
+      </div>
+    </div>
+    <p><strong>JSON Schema</strong> is a small JSON document that describes what other JSON documents are allowed to look like. Types, required keys, value ranges, enums. A contract.</p>
+    <p>You need it because <code>your_app.process(claude_response)</code> assumes a specific shape. If Claude returns <code>{"age": "thirty"}</code> when your code expects <code>{"age": 30}</code>, the next line crashes. The schema is how you tell Claude "here's the exact shape," and how you tell your code "here's what to verify before trusting it."</p>
+    <p>The Claude API uses JSON Schema in three places: <strong>defining tools</strong> the model can call, <strong>forcing structured output</strong> by treating the model's tool-call input as your data, and <strong>validating + retrying</strong> when the model gets the shape wrong. We'll cover all three.</p>
+
+    <div class="callout">
+      <strong>The mental model.</strong> Schema = contract. Validation = enforcement of the contract. Retry = sending the contract violation back to the model so it tries again. Every production AI app you build needs all three.
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- 01 - Demo: Types                                                -->
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">01</div>
+      <div>
+        <h2 class="section-title">Demo: Types</h2>
+        <p class="section-sub">The seven primitive types. The foundation.</p>
+      </div>
+    </div>
+
+    <p>Every value in JSON belongs to one of seven types. <code>type</code> is the most basic schema keyword: it declares what the value must be.</p>
+
+    <table class="basic">
+      <thead><tr><th>type</th><th>matches</th><th>example value</th></tr></thead>
+      <tbody>
+        <tr><td><code>"string"</code></td><td>text</td><td><code>"hello"</code></td></tr>
+        <tr><td><code>"integer"</code></td><td>whole numbers</td><td><code>42</code></td></tr>
+        <tr><td><code>"number"</code></td><td>any number, including floats</td><td><code>3.14</code></td></tr>
+        <tr><td><code>"boolean"</code></td><td>true or false</td><td><code>true</code></td></tr>
+        <tr><td><code>"object"</code></td><td>key-value pairs (a dict)</td><td><code>{"a": 1}</code></td></tr>
+        <tr><td><code>"array"</code></td><td>ordered list</td><td><code>[1, 2, 3]</code></td></tr>
+        <tr><td><code>"null"</code></td><td>just null</td><td><code>null</code></td></tr>
+      </tbody>
+    </table>
+
+    <p>Try it. Edit the value to break the schema. Click Validate.</p>
+
+    <div class="demo-grid">
+      <div class="editor-shell">
+        <div class="editor-label">Schema</div>
+        <textarea id="d1-schema" spellcheck="false">{
+  "type": "integer"
+}</textarea>
+      </div>
+      <div class="editor-shell">
+        <div class="editor-label">Value</div>
+        <textarea id="d1-value" spellcheck="false">42</textarea>
+      </div>
+    </div>
+    <div class="demo-toolbar">
+      <button class="primary" data-validate="d1">Validate</button>
+      <button class="ghost" data-preset="d1-string">Try: string</button>
+      <button class="ghost" data-preset="d1-array">Try: array</button>
+      <button class="ghost" data-preset="d1-null">Try: null</button>
+      <span class="demo-hint" id="d1-hint">JSON ok</span>
+    </div>
+    <div class="result-pane" id="d1-result"><span class="empty">Click Validate to see the result.</span></div>
+
+    <div class="callout">
+      <strong>Note:</strong> <code>"integer"</code> rejects <code>3.14</code>, but <code>"number"</code> accepts both integers and floats. This trips up beginners. Pick <code>"number"</code> when you don't care, <code>"integer"</code> when you do.
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- 02 - Demo: Required vs optional                                 -->
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">02</div>
+      <div>
+        <h2 class="section-title">Demo: Required vs optional</h2>
+        <p class="section-sub">What "required" really means.</p>
+      </div>
+    </div>
+
+    <p>For objects, you list allowed keys in <code>properties</code>. By default <em>every key is optional</em>. To force a key to exist, list it in <code>required</code>.</p>
+
+    <p>Common confusion: not being in <code>required</code> doesn't mean the key is forbidden, only that it can be absent. If the key shows up, its value still has to match its property schema.</p>
+
+    <div class="demo-grid">
+      <div class="editor-shell">
+        <div class="editor-label">Schema</div>
+        <textarea id="d2-schema" spellcheck="false">{
+  "type": "object",
+  "properties": {
+    "name": {"type": "string"},
+    "age":  {"type": "integer"},
+    "tags": {"type": "array"}
+  },
+  "required": ["name"]
+}</textarea>
+      </div>
+      <div class="editor-shell">
+        <div class="editor-label">Value</div>
+        <textarea id="d2-value" spellcheck="false">{
+  "age": 30,
+  "tags": ["admin"]
+}</textarea>
+      </div>
+    </div>
+    <div class="demo-toolbar">
+      <button class="primary" data-validate="d2">Validate</button>
+      <button class="ghost" data-preset="d2-valid">Try: valid object</button>
+      <button class="ghost" data-preset="d2-extra">Try: extra key</button>
+      <span class="demo-hint" id="d2-hint">JSON ok</span>
+    </div>
+    <div class="result-pane" id="d2-result"><span class="empty">Click Validate.</span></div>
+
+    <div class="callout">
+      <strong>Footgun preview:</strong> when you tell Claude to fill a schema with <code>required</code> fields, the model will <em>always</em> produce a value for those fields. If the source doesn't actually contain that info, the model fabricates one. We'll come back to this in section 09.
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- 03 - Demo: Constraints                                          -->
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">03</div>
+      <div>
+        <h2 class="section-title">Demo: Constraints</h2>
+        <p class="section-sub">The keywords that enforce business rules.</p>
+      </div>
+    </div>
+
+    <p>Beyond <code>type</code>, schemas have keywords for value ranges, lengths, patterns, and allowed values. These are how you encode actual business logic.</p>
+
+    <table class="basic">
+      <thead><tr><th>keyword</th><th>applies to</th><th>example</th></tr></thead>
+      <tbody>
+        <tr><td><code>minimum</code> / <code>maximum</code></td><td>numbers</td><td><code>{"type": "integer", "minimum": 0, "maximum": 100}</code></td></tr>
+        <tr><td><code>minLength</code> / <code>maxLength</code></td><td>strings</td><td><code>{"type": "string", "minLength": 3}</code></td></tr>
+        <tr><td><code>pattern</code></td><td>strings (regex)</td><td><code>{"type": "string", "pattern": "^\\d{5}$"}</code></td></tr>
+        <tr><td><code>enum</code></td><td>any type</td><td><code>{"enum": ["low", "med", "high"]}</code></td></tr>
+        <tr><td><code>minItems</code> / <code>maxItems</code></td><td>arrays</td><td><code>{"type": "array", "minItems": 1}</code></td></tr>
+      </tbody>
+    </table>
+
+    <p>The schema below mixes several. Try violating each one.</p>
+
+    <div class="demo-grid">
+      <div class="editor-shell">
+        <div class="editor-label">Schema</div>
+        <textarea id="d3-schema" spellcheck="false">{
+  "type": "object",
+  "properties": {
+    "username": {"type": "string", "minLength": 3, "maxLength": 20},
+    "email":    {"type": "string", "pattern": "^[^@]+@[^@]+\\.[^@]+$"},
+    "age":      {"type": "integer", "minimum": 13, "maximum": 120},
+    "tier":     {"enum": ["free", "pro", "enterprise"]}
+  },
+  "required": ["username", "email", "age", "tier"]
+}</textarea>
+      </div>
+      <div class="editor-shell">
+        <div class="editor-label">Value</div>
+        <textarea id="d3-value" spellcheck="false">{
+  "username": "ab",
+  "email": "not-an-email",
+  "age": 5,
+  "tier": "platinum"
+}</textarea>
+      </div>
+    </div>
+    <div class="demo-toolbar">
+      <button class="primary" data-validate="d3">Validate</button>
+      <button class="ghost" data-preset="d3-valid">Try: valid user</button>
+      <span class="demo-hint" id="d3-hint">JSON ok</span>
+    </div>
+    <div class="result-pane" id="d3-result"><span class="empty">Click Validate.</span></div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- 04 - Demo: Nesting + arrays                                     -->
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">04</div>
+      <div>
+        <h2 class="section-title">Demo: Nesting and arrays</h2>
+        <p class="section-sub">Schemas inside schemas. Where deep error paths come from.</p>
+      </div>
+    </div>
+
+    <p>Real-world data isn't flat. Properties can be objects with their own properties. Arrays can have rules about what their items look like via <code>items</code>.</p>
+
+    <p>When validation fails deep inside a nested structure, the error's <code>path</code> shows you exactly where. <code>['address', 'zip']</code> means "the zip field inside the address field of the root object." Array indices appear as numbers: <code>['books', 0, 'title']</code>.</p>
+
+    <div class="demo-grid">
+      <div class="editor-shell">
+        <div class="editor-label">Schema</div>
+        <textarea id="d4-schema" spellcheck="false">{
+  "type": "object",
+  "required": ["name", "address", "books"],
+  "properties": {
+    "name": {"type": "string"},
+    "address": {
+      "type": "object",
+      "required": ["zip"],
+      "properties": {
+        "city": {"type": "string"},
+        "zip":  {"type": "string", "pattern": "^\\d{5}$"}
+      }
+    },
+    "books": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["title", "year"],
+        "properties": {
+          "title": {"type": "string"},
+          "year":  {"type": "integer", "minimum": 1500}
+        }
+      }
+    }
+  }
+}</textarea>
+      </div>
+      <div class="editor-shell">
+        <div class="editor-label">Value</div>
+        <textarea id="d4-value" spellcheck="false">{
+  "name": "Carlos",
+  "address": {
+    "city": "Las Vegas",
+    "zip": "abc"
+  },
+  "books": [
+    {"title": "Dune", "year": 1965},
+    {"year": 999}
+  ]
+}</textarea>
+      </div>
+    </div>
+    <div class="demo-toolbar">
+      <button class="primary" data-validate="d4">Validate</button>
+      <span class="demo-hint" id="d4-hint">JSON ok</span>
+    </div>
+    <div class="result-pane" id="d4-result"><span class="empty">Click Validate. Notice the path on each error.</span></div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- 05 - Bridge + Mode Selector                                     -->
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">05</div>
+      <div>
+        <h2 class="section-title">Bridge: into the Claude API</h2>
+        <p class="section-sub">You can read a schema now. Time to see how Claude uses one.</p>
+      </div>
+    </div>
+
+    <p>The next three demos can run two ways. Default is <strong>Simulate</strong>: realistic example responses, no network calls, no key needed. Switch to <strong>Real API</strong> to actually call Claude using your own API key. The key stays in your browser only.</p>
+
+    <div class="mode-panel">
+      <div class="mode-panel-head">Demo mode</div>
+      <h3>Choose how the Claude API demos should run</h3>
+
+      <div class="mode-toggle" id="mode-toggle">
+        <button data-mode="simulate" class="active">Simulate</button>
+        <button data-mode="real">Real API</button>
+      </div>
+
+      <div id="mode-simulate-info" style="font-size: 14px; color: var(--ink-soft);">
+        Demos use pre-canned example responses. Click "Run" buttons to see them. No network calls, no key required.
+      </div>
+
+      <div id="mode-real-info" class="hidden">
+        <div style="font-size: 14px; color: var(--ink-soft); margin-bottom: 14px;">
+          Real calls to <code>api.anthropic.com</code> directly from this browser. Your key is stored only in this tab's session memory.
+        </div>
+        <div class="key-row">
+          <input type="password" id="api-key" placeholder="sk-ant-…" autocomplete="off" />
+          <select id="model-select">
+            <option value="claude-sonnet-4-6">claude-sonnet-4-6 (balanced)</option>
+            <option value="claude-opus-4-7">claude-opus-4-7 (smartest)</option>
+            <option value="claude-haiku-4-5-20251001">claude-haiku-4-5 (cheapest)</option>
+          </select>
+          <button class="ghost" id="clear-key">Clear key</button>
+          <span class="key-status unset" id="key-status"><span class="dot"></span><span id="key-status-text">No key set</span></span>
+        </div>
+        <div class="key-hint">⚠ Don't paste your key while screen-sharing. Key is held in sessionStorage only and cleared when you close this tab.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- 06 - Demo: Tool use                                             -->
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">06</div>
+      <div>
+        <h2 class="section-title">Demo: Tool use</h2>
+        <p class="section-sub">Schemas describe the tools Claude is allowed to call.</p>
+      </div>
+    </div>
+
+    <p>When you give Claude tools, each tool definition has a <code>name</code>, <code>description</code>, and <code>input_schema</code>. The model reads all three. The schema constrains what arguments Claude can send. The description tells Claude <em>when</em> to call the tool. Both matter.</p>
+
+    <p>Edit the schema below. Ask Claude something that should trigger the tool. The result pane will show the model's <code>tool_use</code> block: the tool it picked, plus a JSON object of arguments that conforms to the schema.</p>
+
+    <div class="demo-grid">
+      <div class="editor-shell">
+        <div class="editor-label">Tool definition (with input_schema)</div>
+        <textarea id="d6-tool" spellcheck="false">{
+  "name": "get_weather",
+  "description": "Get the current weather for a specific location. Call this when the user asks about weather, temperature, or conditions in a place.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "location": {
+        "type": "string",
+        "description": "City and state or country, e.g. 'Seattle, WA' or 'Paris, France'"
+      },
+      "unit": {
+        "type": "string",
+        "enum": ["celsius", "fahrenheit"],
+        "description": "Temperature unit"
+      }
+    },
+    "required": ["location"]
+  }
+}</textarea>
+      </div>
+      <div class="editor-shell">
+        <div class="editor-label">User message to Claude</div>
+        <textarea id="d6-message" spellcheck="false" style="min-height: 120px;">What's the weather in Las Vegas right now?</textarea>
+      </div>
+    </div>
+    <div class="demo-toolbar">
+      <button class="primary" data-call="d6">Run <span class="chip live mode-real-only hidden">live</span><span class="chip sim mode-sim-only">simulated</span></button>
+      <span class="demo-hint" id="d6-hint">Ready</span>
+    </div>
+    <div class="result-pane api" id="d6-result"><span class="empty">Run to see the model's tool_use block.</span></div>
+
+    <div class="callout">
+      <strong>Why descriptions are critical.</strong> The model has no idea what your tool does beyond the description. A description like <code>"Get weather"</code> works for one tool, but if you have two similar tools, the model will misroute. Treat tool descriptions like API docs: input formats, when to use this vs alternatives, edge cases.
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- 07 - Demo: Structured output via tool_choice                    -->
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">07</div>
+      <div>
+        <h2 class="section-title">Demo: Structured output via tool_choice</h2>
+        <p class="section-sub">The trick: a tool whose <em>input</em> is your output.</p>
+      </div>
+    </div>
+
+    <p>The Claude API doesn't have a separate "structured output" mode. Instead you exploit the tool-use system: define a tool whose <code>input_schema</code> describes the data shape you want, then force Claude to call it with <code>tool_choice: {"type": "tool", "name": "..."}</code>. The arguments Claude sends become your structured data.</p>
+
+    <p>This works because Claude is required to produce a JSON object that conforms to the tool's <code>input_schema</code>. You're not really executing a tool; you're using the schema enforcement as a structured output mechanism.</p>
+
+    <div class="demo-grid">
+      <div class="editor-shell">
+        <div class="editor-label">Output schema (as a tool's input_schema)</div>
+        <textarea id="d7-tool" spellcheck="false">{
+  "name": "extract_entities",
+  "description": "Extract named entities from the user's text.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "entities": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["text", "type"],
+          "properties": {
+            "text": {"type": "string"},
+            "type": {
+              "type": "string",
+              "enum": ["person", "company", "location", "date", "other"]
+            }
+          }
+        }
+      }
+    },
+    "required": ["entities"]
+  }
+}</textarea>
+      </div>
+      <div class="editor-shell">
+        <div class="editor-label">Text to extract from</div>
+        <textarea id="d7-message" spellcheck="false" style="min-height: 120px;">Alice from Microsoft met with Bob from Apple in San Francisco on March 5th, 2025.</textarea>
+      </div>
+    </div>
+    <div class="demo-toolbar">
+      <button class="primary" data-call="d7">Run <span class="chip live mode-real-only hidden">live</span><span class="chip sim mode-sim-only">simulated</span></button>
+      <span class="demo-hint" id="d7-hint">Ready</span>
+    </div>
+    <div class="result-pane api" id="d7-result"><span class="empty">Run to see the extracted entities as structured JSON.</span></div>
+
+    <div class="callout">
+      <strong>Validation after the fact.</strong> The model produces output that <em>should</em> match the schema, but production code still validates with <code>jsonschema</code> before trusting it. Strict schemas via tool-use eliminate JSON syntax errors but not semantic errors (totals that don't add up, fields in wrong places).
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- 08 - Demo: Validation-retry loop                                -->
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">08</div>
+      <div>
+        <h2 class="section-title">Demo: Validation-retry loop</h2>
+        <p class="section-sub">When the model gets it wrong: catch, explain, retry.</p>
+      </div>
+    </div>
+
+    <p>Even with schemas attached, models sometimes return data that fails validation: wrong types, missing fields, values out of range. The fix isn't to fail loudly. It's to send the validation errors back to the model and ask for a corrected response.</p>
+
+    <p>This demo starts with a deliberately-broken response. Click <strong>Validate</strong> to see what's wrong. Click <strong>Build retry prompt</strong> to see the prompt you'd send Claude. Click <strong>Run retry</strong> to actually fix it.</p>
+
+    <div class="demo-grid">
+      <div class="editor-shell">
+        <div class="editor-label">Schema (event)</div>
+        <textarea id="d8-schema" spellcheck="false">{
+  "type": "object",
+  "required": ["title", "date", "attendees", "priority"],
+  "properties": {
+    "title":    {"type": "string", "minLength": 1},
+    "date":     {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+    "attendees":{"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "priority": {"enum": ["low", "med", "high"]}
+  }
+}</textarea>
+      </div>
+      <div class="editor-shell">
+        <div class="editor-label">"Model response" (deliberately broken)</div>
+        <textarea id="d8-response" spellcheck="false">{
+  "title": "Team sync",
+  "date": "March 5th",
+  "attendees": "Alice, Bob",
+  "priority": "urgent"
+}</textarea>
+      </div>
+    </div>
+    <div class="demo-toolbar">
+      <button class="primary" data-action="d8-validate">Validate</button>
+      <button class="ghost" data-action="d8-build">Build retry prompt</button>
+      <button class="primary" data-action="d8-retry">Run retry <span class="chip live mode-real-only hidden">live</span><span class="chip sim mode-sim-only">simulated</span></button>
+    </div>
+    <div class="result-pane" id="d8-result"><span class="empty">Walk through the buttons left to right.</span></div>
+
+    <div class="callout">
+      <strong>The lesson from earlier:</strong> feed <em>all</em> the validation errors back to the model in one prompt, not one at a time. Each round trip is latency and cost. Use <code>iter_errors()</code>, not <code>validate()</code>, when building the retry prompt.
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- 09 - Footguns                                                   -->
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">09</div>
+      <div>
+        <h2 class="section-title">Footguns</h2>
+        <p class="section-sub">The mistakes you'll make on your first real schema.</p>
+      </div>
+    </div>
+
+    <h3>1. Required-everywhere causes fabrication</h3>
+    <p>If you mark every field as <code>required</code>, Claude is contractually obligated to produce a value for each. When the source data doesn't actually contain that info, the model invents one. Make fields optional when they might genuinely be absent.</p>
+
+    <h3>2. Nullable fields need explicit handling</h3>
+    <p>"Optional" and "nullable" aren't the same. Optional means the key can be missing. Nullable means the key is present but the value is <code>null</code>. To allow both:</p>
+<pre class="code"><span class="c">// allow string OR null (nullable)</span>
+{<span class="s">"type"</span>: [<span class="s">"string"</span>, <span class="s">"null"</span>]}
+
+<span class="c">// or equivalently</span>
+{<span class="s">"anyOf"</span>: [{<span class="s">"type"</span>: <span class="s">"string"</span>}, {<span class="s">"type"</span>: <span class="s">"null"</span>}]}</pre>
+
+    <h3>3. Enums are brittle. Use "other" + detail.</h3>
+    <p>An enum like <code>["bug", "feature", "docs"]</code> works until someone files an issue that doesn't fit. Add an <code>"other"</code> option plus a sibling detail field, so the model has somewhere to put unusual cases instead of cramming them into the wrong slot:</p>
+<pre class="code">{
+  <span class="s">"type"</span>: <span class="s">"object"</span>,
+  <span class="s">"properties"</span>: {
+    <span class="s">"category"</span>: {<span class="s">"enum"</span>: [<span class="s">"bug"</span>, <span class="s">"feature"</span>, <span class="s">"docs"</span>, <span class="s">"other"</span>]},
+    <span class="s">"category_detail"</span>: {<span class="s">"type"</span>: <span class="s">"string"</span>}
+  },
+  <span class="s">"required"</span>: [<span class="s">"category"</span>]
+}</pre>
+
+    <h3>4. Over-strict patterns cause hallucination</h3>
+    <p>A regex like <code>^[A-Z]{2}-\d{6}$</code> forces Claude to produce something matching that shape, even when the source text says "the invoice number is somewhere on page two." The model will invent <code>AB-123456</code> rather than admit it doesn't know. Either relax the pattern, or make the field optional, or add an <code>"unknown"</code> escape valve.</p>
+
+    <h3>5. Descriptions are part of the schema</h3>
+    <p>Every property can have a <code>description</code> field. Claude reads it. A schema with rich descriptions ("ISO 8601 date like 2025-03-05, never include time") consistently outperforms a schema with the same structure but no descriptions. Treat property descriptions as part of the prompt.</p>
+
+    <div class="callout bad">
+      <strong>The unifying principle:</strong> a schema is a prompt. Every <code>required</code>, <code>enum</code>, <code>pattern</code>, and <code>description</code> shapes the model's behavior. Restrictive schemas produce confident, wrong output. Permissive schemas with good descriptions produce honest output.
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- 10 - Putting it together                                        -->
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">10</div>
+      <div>
+        <h2 class="section-title">Putting it together</h2>
+        <p class="section-sub">A complete tool, ready to paste into your app.</p>
+      </div>
+    </div>
+
+    <p>Here's an entity extractor that uses everything from this page: a forced tool_choice for structured output, nullable fields, an <code>"other"</code> enum escape valve, rich descriptions, and validation after the call.</p>
+
+<pre class="code"><span class="k">import</span> anthropic, jsonschema
+
+client = anthropic.Anthropic()
+
+EXTRACT_TOOL = {
+    <span class="s">"name"</span>: <span class="s">"extract_entities"</span>,
+    <span class="s">"description"</span>: <span class="s">"Extract named entities from text. Use this whenever the user provides text containing people, organizations, places, or dates that should be identified."</span>,
+    <span class="s">"input_schema"</span>: {
+        <span class="s">"type"</span>: <span class="s">"object"</span>,
+        <span class="s">"required"</span>: [<span class="s">"entities"</span>],
+        <span class="s">"properties"</span>: {
+            <span class="s">"entities"</span>: {
+                <span class="s">"type"</span>: <span class="s">"array"</span>,
+                <span class="s">"items"</span>: {
+                    <span class="s">"type"</span>: <span class="s">"object"</span>,
+                    <span class="s">"required"</span>: [<span class="s">"text"</span>, <span class="s">"type"</span>],
+                    <span class="s">"properties"</span>: {
+                        <span class="s">"text"</span>: {<span class="s">"type"</span>: <span class="s">"string"</span>, <span class="s">"description"</span>: <span class="s">"The entity as it appears in the source text."</span>},
+                        <span class="s">"type"</span>: {
+                            <span class="s">"enum"</span>: [<span class="s">"person"</span>, <span class="s">"company"</span>, <span class="s">"location"</span>, <span class="s">"date"</span>, <span class="s">"other"</span>],
+                            <span class="s">"description"</span>: <span class="s">"Best-fit category. Use 'other' for anything that doesn't cleanly fit."</span>
+                        },
+                        <span class="s">"type_detail"</span>: {
+                            <span class="s">"type"</span>: [<span class="s">"string"</span>, <span class="s">"null"</span>],
+                            <span class="s">"description"</span>: <span class="s">"Free-text clarification when type='other'. Null otherwise."</span>
+                        }
+                    }
+                }
+            }
+        }
+    },
+}
+
+resp = client.messages.create(
+    model=<span class="s">"claude-sonnet-4-6"</span>,
+    max_tokens=<span class="n">1024</span>,
+    tools=[EXTRACT_TOOL],
+    tool_choice={<span class="s">"type"</span>: <span class="s">"tool"</span>, <span class="s">"name"</span>: <span class="s">"extract_entities"</span>},
+    messages=[{<span class="s">"role"</span>: <span class="s">"user"</span>, <span class="s">"content"</span>: text}],
+)
+
+<span class="c"># Pull the tool_use block out of the response</span>
+tool_block = next(b <span class="k">for</span> b <span class="k">in</span> resp.content <span class="k">if</span> b.type == <span class="s">"tool_use"</span>)
+data = tool_block.input
+
+<span class="c"># Validate, even though the schema was enforced -- belt and suspenders</span>
+validator = jsonschema.Draft202012Validator(EXTRACT_TOOL[<span class="s">"input_schema"</span>])
+errors = list(validator.iter_errors(data))
+<span class="k">if</span> errors:
+    <span class="c"># Build a retry prompt with the full error list (not just one)</span>
+    retry_with_errors(text, data, errors)
+<span class="k">else</span>:
+    <span class="k">return</span> data[<span class="s">"entities"</span>]</pre>
+
+    <div class="callout">
+      <strong>This is the whole pattern.</strong> Tool with rich descriptions, forced tool_choice, validate after, retry with the full error list. Every structured-output use case you'll build follows this template.
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- 11 - Further reading                                            -->
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">11</div>
+      <div>
+        <h2 class="section-title">Further reading</h2>
+        <p class="section-sub">Sources that go deeper than this page does.</p>
+      </div>
+    </div>
+
+    <ul class="further-reading">
+      <li>
+        <a href="https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview" target="_blank" rel="noopener">Anthropic: Tool use overview</a>
+        <div class="desc">The canonical doc on how the Claude API uses tools and input_schema.</div>
+      </li>
+      <li>
+        <a href="https://docs.claude.com/en/api/messages" target="_blank" rel="noopener">Anthropic: Messages API reference</a>
+        <div class="desc">Every parameter, including <code>tools</code>, <code>tool_choice</code>, and response shapes.</div>
+      </li>
+      <li>
+        <a href="https://json-schema.org/learn/getting-started-step-by-step" target="_blank" rel="noopener">JSON Schema: Getting started</a>
+        <div class="desc">Official tutorial. Covers the full spec, not just the keywords used here.</div>
+      </li>
+      <li>
+        <a href="https://json-schema.org/understanding-json-schema" target="_blank" rel="noopener">Understanding JSON Schema</a>
+        <div class="desc">The deep-dive reference. Bookmark this. You'll need it.</div>
+      </li>
+      <li>
+        <a href="https://python-jsonschema.readthedocs.io/" target="_blank" rel="noopener">python-jsonschema docs</a>
+        <div class="desc">The Python library this page runs in your browser. Validator API, error objects, best_match.</div>
+      </li>
+    </ul>
+  </section>
+
+  <footer>
+    Built for teaching. Real <code>jsonschema</code> running in your browser via Pyodide. Real Claude API calls in Real-API mode using your own key. Press <code>F11</code> for projection.
+  </footer>
+</div>
+
+<!-- ============================================================== -->
+<!-- Pyodide + app logic                                              -->
+<!-- ============================================================== -->
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+'use strict';
+
+// ===== Global state =====
+const statusEl = document.getElementById('status');
+const statusText = document.getElementById('status-text');
+let pyodide = null;
+let appMode = 'simulate'; // 'simulate' | 'real'
+
+// ===== Status helpers =====
+function setStatus(cls, text) {
+  statusEl.className = 'status ' + cls;
+  statusText.textContent = text;
+}
+
+// ===== Pyodide boot =====
+async function boot() {
+  try {
+    setStatus('loading', 'Booting Python (Pyodide)…');
+    pyodide = await loadPyodide();
+    setStatus('loading', 'Installing jsonschema…');
+    await pyodide.loadPackage('micropip');
+    await pyodide.runPythonAsync(`
+import micropip
+await micropip.install('jsonschema')
+import json, jsonschema
+from jsonschema import Draft202012Validator
+    `);
+    setStatus('ready', 'Python ready. Demos are live.');
+    enableAll();
+  } catch (e) {
+    console.error(e);
+    setStatus('error', 'Failed to boot: ' + e.message);
+  }
+}
+
+function enableAll() {
+  document.querySelectorAll('button[data-validate], button[data-call], button[data-action]').forEach(b => b.disabled = false);
+}
+
+// ===== Validation via Pyodide =====
+async function runValidation(schemaStr, valueStr) {
+  if (!pyodide) return { fatalError: 'Python not ready' };
+  try {
+    // parse the schema and value as JSON to catch syntax errors first
+    JSON.parse(schemaStr);
+    JSON.parse(valueStr);
+  } catch (e) {
+    return { fatalError: 'Invalid JSON in schema or value: ' + e.message };
+  }
+  pyodide.globals.set('_schema_json', schemaStr);
+  pyodide.globals.set('_value_json', valueStr);
+  const py = `
+import json, jsonschema
+from jsonschema import Draft202012Validator
+
+schema = json.loads(_schema_json)
+value = json.loads(_value_json)
+result = {'ok': True, 'errors': []}
+try:
+    Draft202012Validator.check_schema(schema)
+except jsonschema.SchemaError as e:
+    result = {'ok': False, 'schema_error': str(e), 'errors': []}
+else:
+    validator = Draft202012Validator(schema)
+    errors = list(validator.iter_errors(value))
+    if errors:
+        result['ok'] = False
+        for e in errors:
+            result['errors'].append({
+                'path': list(e.absolute_path),
+                'validator': e.validator,
+                'message': e.message,
+            })
+json.dumps(result)
+  `;
+  const out = await pyodide.runPythonAsync(py);
+  return JSON.parse(out);
+}
+
+// ===== Render result panes =====
+function renderValidationResult(el, result) {
+  if (result.fatalError) {
+    el.className = 'result-pane failure';
+    el.innerHTML = `<div class="result-head">✗ Cannot validate</div><div>${escapeHtml(result.fatalError)}</div>`;
+    return;
+  }
+  if (result.schema_error) {
+    el.className = 'result-pane failure';
+    el.innerHTML = `<div class="result-head">✗ Schema is invalid</div><div>${escapeHtml(result.schema_error)}</div>`;
+    return;
+  }
+  if (result.ok) {
+    el.className = 'result-pane success';
+    el.innerHTML = `<div class="result-head">✓ Valid</div><div style="color: var(--ink-soft);">The value satisfies every rule in the schema.</div>`;
+    return;
+  }
+  el.className = 'result-pane failure';
+  let html = `<div class="result-head">✗ ${result.errors.length} violation${result.errors.length === 1 ? '' : 's'}</div>`;
+  result.errors.forEach(e => {
+    const pathStr = e.path.length === 0 ? '&lt;root&gt;' : e.path.map(p => String(p)).join('.');
+    html += `
+      <div class="err-row">
+        <span class="err-path">${escapeHtml(pathStr)}</span>
+        <span class="err-meta">validator: ${escapeHtml(e.validator)}</span>
+        <span class="err-msg">${escapeHtml(e.message)}</span>
+      </div>`;
+  });
+  el.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ===== Wire up validate buttons (demos 1-4) =====
+document.querySelectorAll('button[data-validate]').forEach(btn => {
+  btn.disabled = true;
+  btn.addEventListener('click', async () => {
+    const id = btn.dataset.validate;
+    const schema = document.getElementById(`${id}-schema`).value;
+    const value = document.getElementById(`${id}-value`).value;
+    const resultEl = document.getElementById(`${id}-result`);
+    resultEl.className = 'result-pane';
+    resultEl.innerHTML = '<span class="empty">Validating…</span>';
+    const r = await runValidation(schema, value);
+    renderValidationResult(resultEl, r);
+  });
+});
+
+// ===== JSON syntax hints =====
+function attachJsonHint(textareaId, hintId) {
+  const ta = document.getElementById(textareaId);
+  const hint = document.getElementById(hintId);
+  if (!ta || !hint) return;
+  const check = () => {
+    try { JSON.parse(ta.value); hint.textContent = 'JSON ok'; hint.classList.remove('invalid'); }
+    catch (e) { hint.textContent = 'invalid JSON'; hint.classList.add('invalid'); }
+  };
+  ta.addEventListener('input', check);
+}
+['d1', 'd2', 'd3', 'd4'].forEach(id => {
+  attachJsonHint(`${id}-schema`, `${id}-hint`);
+  attachJsonHint(`${id}-value`, `${id}-hint`);
+});
+
+// ===== Presets =====
+const presets = {
+  'd1-string': { schema: `{\n  "type": "string"\n}`, value: `"hello world"`, target: 'd1' },
+  'd1-array':  { schema: `{\n  "type": "array",\n  "items": {"type": "integer"}\n}`, value: `[1, 2, 3]`, target: 'd1' },
+  'd1-null':   { schema: `{\n  "type": "null"\n}`, value: `null`, target: 'd1' },
+  'd2-valid':  { schema: null, value: `{\n  "name": "Alice",\n  "age": 30\n}`, target: 'd2' },
+  'd2-extra':  { schema: null, value: `{\n  "name": "Alice",\n  "favorite_color": "purple"\n}`, target: 'd2' },
+  'd3-valid':  { schema: null, value: `{\n  "username": "carlos",\n  "email": "c@example.com",\n  "age": 35,\n  "tier": "pro"\n}`, target: 'd3' },
+};
+document.querySelectorAll('button[data-preset]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const p = presets[btn.dataset.preset];
+    if (!p) return;
+    if (p.schema !== null) document.getElementById(`${p.target}-schema`).value = p.schema;
+    if (p.value  !== null) document.getElementById(`${p.target}-value`).value  = p.value;
+  });
+});
+
+// ===== Mode selector =====
+const modeToggle = document.getElementById('mode-toggle');
+const modeSimInfo = document.getElementById('mode-simulate-info');
+const modeRealInfo = document.getElementById('mode-real-info');
+const apiKeyInput = document.getElementById('api-key');
+const modelSelect = document.getElementById('model-select');
+const clearKeyBtn = document.getElementById('clear-key');
+const keyStatusEl = document.getElementById('key-status');
+const keyStatusText = document.getElementById('key-status-text');
+
+function refreshKeyStatus() {
+  const key = sessionStorage.getItem('anthropicApiKey') || '';
+  if (key) {
+    keyStatusEl.className = 'key-status set';
+    keyStatusText.textContent = `Key set (sk-…${key.slice(-4)})`;
+  } else {
+    keyStatusEl.className = 'key-status unset';
+    keyStatusText.textContent = 'No key set';
+  }
+}
+
+function setMode(mode) {
+  appMode = mode;
+  modeToggle.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  modeSimInfo.classList.toggle('hidden', mode !== 'simulate');
+  modeRealInfo.classList.toggle('hidden', mode !== 'real');
+  document.querySelectorAll('.mode-real-only').forEach(el => el.classList.toggle('hidden', mode !== 'real'));
+  document.querySelectorAll('.mode-sim-only').forEach(el => el.classList.toggle('hidden', mode !== 'simulate'));
+}
+
+modeToggle.querySelectorAll('button').forEach(b => {
+  b.addEventListener('click', () => setMode(b.dataset.mode));
+});
+
+apiKeyInput.addEventListener('input', () => {
+  if (apiKeyInput.value.trim()) {
+    sessionStorage.setItem('anthropicApiKey', apiKeyInput.value.trim());
+  } else {
+    sessionStorage.removeItem('anthropicApiKey');
+  }
+  refreshKeyStatus();
+});
+
+clearKeyBtn.addEventListener('click', () => {
+  apiKeyInput.value = '';
+  sessionStorage.removeItem('anthropicApiKey');
+  refreshKeyStatus();
+});
+
+// Restore key from sessionStorage into the input field (sessionStorage
+// is tab-scoped: it survives reloads but dies on tab close).
+const existingKey = sessionStorage.getItem('anthropicApiKey');
+if (existingKey) apiKeyInput.value = existingKey;
+refreshKeyStatus();
+setMode('simulate');
+
+// ===== Anthropic API call =====
+async function callClaude(messages, tools, toolChoice) {
+  const key = sessionStorage.getItem('anthropicApiKey');
+  if (!key) throw new Error('No API key set. Paste your key in the mode panel.');
+  const model = modelSelect.value;
+  const body = {
+    model,
+    max_tokens: 1024,
+    messages,
+  };
+  if (tools) body.tools = tools;
+  if (toolChoice) body.tool_choice = toolChoice;
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    const msg = data?.error?.message || `HTTP ${resp.status}`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+// ===== Demo 6 (Tool use) =====
+const D6_SIMULATED = {
+  id: 'msg_simulated_d6',
+  type: 'message',
+  role: 'assistant',
+  model: 'claude-sonnet-4-6',
+  content: [
+    {
+      type: 'text',
+      text: "I'll check the weather for you."
+    },
+    {
+      type: 'tool_use',
+      id: 'toolu_sim_001',
+      name: 'get_weather',
+      input: { location: 'Las Vegas, NV', unit: 'fahrenheit' }
+    }
+  ],
+  stop_reason: 'tool_use'
+};
+
+document.querySelector('button[data-call="d6"]').addEventListener('click', async () => {
+  const btn = document.querySelector('button[data-call="d6"]');
+  const resultEl = document.getElementById('d6-result');
+  let tool, message;
+  try { tool = JSON.parse(document.getElementById('d6-tool').value); }
+  catch (e) {
+    resultEl.className = 'result-pane failure';
+    resultEl.innerHTML = `<div class="result-head">✗ Tool JSON is invalid</div><div>${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  message = document.getElementById('d6-message').value;
+
+  btn.disabled = true;
+  resultEl.className = 'result-pane api';
+  resultEl.innerHTML = '<span class="empty">Calling Claude…</span>';
+
+  let response;
+  try {
+    if (appMode === 'real') {
+      response = await callClaude([{ role: 'user', content: message }], [tool], null);
+    } else {
+      await new Promise(r => setTimeout(r, 400)); // small pause for realism
+      response = D6_SIMULATED;
+    }
+  } catch (e) {
+    resultEl.className = 'result-pane failure';
+    resultEl.innerHTML = `<div class="result-head">✗ API error</div><div>${escapeHtml(e.message)}</div>`;
+    btn.disabled = false;
+    return;
+  }
+
+  const toolBlock = response.content.find(b => b.type === 'tool_use');
+  const textBlocks = response.content.filter(b => b.type === 'text');
+
+  let html = `<div class="result-head">${appMode === 'real' ? '✓ Live response from Claude' : '✓ Simulated response'}</div>`;
+  if (textBlocks.length) {
+    html += `<div style="margin-bottom: 14px; color: var(--ink-soft);">Text: ${textBlocks.map(t => escapeHtml(t.text)).join(' ')}</div>`;
+  }
+  if (toolBlock) {
+    html += `<div style="margin-bottom: 6px;"><strong>tool_use block</strong></div>`;
+    html += `<div style="margin-bottom: 6px;">name: <span style="color: var(--accent);">${escapeHtml(toolBlock.name)}</span></div>`;
+    html += `<div style="margin-bottom: 6px;">input (validates against your schema):</div>`;
+    html += `<pre class="code" style="margin: 6px 0 0;">${escapeHtml(JSON.stringify(toolBlock.input, null, 2))}</pre>`;
+  } else {
+    html += `<div style="color: var(--ink-soft);">Model didn't call the tool. Try rephrasing the message to be more weather-related.</div>`;
+  }
+  html += `<div style="margin-top: 12px; font-size: 11px; color: var(--muted);">stop_reason: ${escapeHtml(response.stop_reason || 'unknown')}</div>`;
+  resultEl.innerHTML = html;
+  btn.disabled = false;
+});
+
+// ===== Demo 7 (Structured output via tool_choice) =====
+const D7_SIMULATED = {
+  id: 'msg_simulated_d7',
+  type: 'message',
+  role: 'assistant',
+  model: 'claude-sonnet-4-6',
+  content: [
+    {
+      type: 'tool_use',
+      id: 'toolu_sim_002',
+      name: 'extract_entities',
+      input: {
+        entities: [
+          { text: 'Alice', type: 'person' },
+          { text: 'Microsoft', type: 'company' },
+          { text: 'Bob', type: 'person' },
+          { text: 'Apple', type: 'company' },
+          { text: 'San Francisco', type: 'location' },
+          { text: 'March 5th, 2025', type: 'date' }
+        ]
+      }
+    }
+  ],
+  stop_reason: 'tool_use'
+};
+
+document.querySelector('button[data-call="d7"]').addEventListener('click', async () => {
+  const btn = document.querySelector('button[data-call="d7"]');
+  const resultEl = document.getElementById('d7-result');
+  let tool, message;
+  try { tool = JSON.parse(document.getElementById('d7-tool').value); }
+  catch (e) {
+    resultEl.className = 'result-pane failure';
+    resultEl.innerHTML = `<div class="result-head">✗ Tool JSON is invalid</div><div>${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  message = document.getElementById('d7-message').value;
+
+  btn.disabled = true;
+  resultEl.className = 'result-pane api';
+  resultEl.innerHTML = '<span class="empty">Calling Claude with forced tool_choice…</span>';
+
+  let response;
+  try {
+    if (appMode === 'real') {
+      response = await callClaude(
+        [{ role: 'user', content: message }],
+        [tool],
+        { type: 'tool', name: tool.name }
+      );
+    } else {
+      await new Promise(r => setTimeout(r, 400));
+      response = D7_SIMULATED;
+    }
+  } catch (e) {
+    resultEl.className = 'result-pane failure';
+    resultEl.innerHTML = `<div class="result-head">✗ API error</div><div>${escapeHtml(e.message)}</div>`;
+    btn.disabled = false;
+    return;
+  }
+
+  const toolBlock = response.content.find(b => b.type === 'tool_use');
+  if (!toolBlock) {
+    resultEl.className = 'result-pane failure';
+    resultEl.innerHTML = `<div class="result-head">✗ No tool_use block in response</div>`;
+    btn.disabled = false;
+    return;
+  }
+
+  // Validate the structured output against the schema
+  const schemaJson = JSON.stringify(tool.input_schema);
+  const valueJson = JSON.stringify(toolBlock.input);
+  const validation = await runValidation(schemaJson, valueJson);
+
+  let html = `<div class="result-head">${appMode === 'real' ? '✓ Live response' : '✓ Simulated response'}</div>`;
+  html += `<div style="margin-bottom: 6px;">Structured output (model's tool input):</div>`;
+  html += `<pre class="code" style="margin: 6px 0 14px;">${escapeHtml(JSON.stringify(toolBlock.input, null, 2))}</pre>`;
+  html += `<div style="margin-bottom: 4px;"><strong>Validation against the schema:</strong></div>`;
+  if (validation.ok) {
+    html += `<div style="color: var(--good);">✓ Output conforms to the schema.</div>`;
+  } else {
+    html += `<div style="color: var(--bad);">✗ Output failed validation:</div>`;
+    validation.errors.forEach(e => {
+      const pathStr = e.path.length === 0 ? '&lt;root&gt;' : e.path.map(p => String(p)).join('.');
+      html += `<div class="err-row"><span class="err-path">${escapeHtml(pathStr)}</span> <span class="err-msg">${escapeHtml(e.message)}</span></div>`;
+    });
+  }
+  resultEl.innerHTML = html;
+  btn.disabled = false;
+});
+
+// ===== Demo 8 (Validation-retry loop) =====
+let d8State = { errors: null, retryPrompt: null };
+
+const D8_SIMULATED_RETRY = {
+  id: 'msg_simulated_d8',
+  type: 'message',
+  role: 'assistant',
+  content: [
+    {
+      type: 'tool_use',
+      id: 'toolu_sim_003',
+      name: 'record_event',
+      input: {
+        title: 'Team sync',
+        date: '2025-03-05',
+        attendees: ['Alice', 'Bob'],
+        priority: 'high'
+      }
+    }
+  ],
+  stop_reason: 'tool_use'
+};
+
+document.querySelector('button[data-action="d8-validate"]').addEventListener('click', async () => {
+  const resultEl = document.getElementById('d8-result');
+  const schema = document.getElementById('d8-schema').value;
+  const response = document.getElementById('d8-response').value;
+  resultEl.className = 'result-pane';
+  resultEl.innerHTML = '<span class="empty">Validating…</span>';
+  const r = await runValidation(schema, response);
+  if (r.fatalError) {
+    resultEl.className = 'result-pane failure';
+    resultEl.innerHTML = `<div class="result-head">✗ ${escapeHtml(r.fatalError)}</div>`;
+    return;
+  }
+  d8State.errors = r.errors || [];
+  if (r.ok) {
+    resultEl.className = 'result-pane success';
+    resultEl.innerHTML = `<div class="result-head">✓ No errors</div><div style="color: var(--ink-soft);">Nothing to retry.</div>`;
+    return;
+  }
+  resultEl.className = 'result-pane failure';
+  let html = `<div class="result-head">✗ ${r.errors.length} validation error${r.errors.length === 1 ? '' : 's'}</div>`;
+  r.errors.forEach(e => {
+    const pathStr = e.path.length === 0 ? '&lt;root&gt;' : e.path.map(p => String(p)).join('.');
+    html += `<div class="err-row"><span class="err-path">${escapeHtml(pathStr)}</span> <span class="err-meta">validator: ${escapeHtml(e.validator)}</span><span class="err-msg">${escapeHtml(e.message)}</span></div>`;
+  });
+  html += `<div style="margin-top: 14px; color: var(--ink-soft);">Now click <strong>Build retry prompt</strong> to see what you'd send Claude.</div>`;
+  resultEl.innerHTML = html;
+});
+
+document.querySelector('button[data-action="d8-build"]').addEventListener('click', () => {
+  const resultEl = document.getElementById('d8-result');
+  if (!d8State.errors) {
+    resultEl.className = 'result-pane failure';
+    resultEl.innerHTML = `<div class="result-head">Run Validate first</div>`;
+    return;
+  }
+  const schema = document.getElementById('d8-schema').value;
+  const response = document.getElementById('d8-response').value;
+  const errorList = d8State.errors.map(e => {
+    const path = e.path.length === 0 ? '<root>' : e.path.join('.');
+    return `- at "${path}": ${e.message}`;
+  }).join('\n');
+  const retryPrompt =
+`Your previous response failed validation against this schema:
+
+${schema}
+
+The response you sent was:
+
+${response}
+
+The following validation errors must all be fixed:
+
+${errorList}
+
+Return a corrected response that satisfies the schema. Address every error above in a single reply.`;
+
+  d8State.retryPrompt = retryPrompt;
+
+  resultEl.className = 'result-pane api';
+  resultEl.innerHTML = `<div class="result-head">Retry prompt (what you'd send Claude)</div>
+    <pre class="code" style="margin: 6px 0 14px; white-space: pre-wrap;">${escapeHtml(retryPrompt)}</pre>
+    <div style="color: var(--ink-soft);">All errors in one prompt. One round-trip. Now click <strong>Run retry</strong> to send it.</div>`;
+});
+
+document.querySelector('button[data-action="d8-retry"]').addEventListener('click', async () => {
+  const btn = document.querySelector('button[data-action="d8-retry"]');
+  const resultEl = document.getElementById('d8-result');
+  if (!d8State.retryPrompt) {
+    resultEl.className = 'result-pane failure';
+    resultEl.innerHTML = `<div class="result-head">Build the retry prompt first</div>`;
+    return;
+  }
+  btn.disabled = true;
+  resultEl.className = 'result-pane api';
+  resultEl.innerHTML = '<span class="empty">Running retry…</span>';
+
+  const schema = document.getElementById('d8-schema').value;
+  let schemaObj;
+  try { schemaObj = JSON.parse(schema); } catch (e) {
+    resultEl.className = 'result-pane failure';
+    resultEl.innerHTML = `<div class="result-head">✗ Schema JSON is invalid</div>`;
+    btn.disabled = false;
+    return;
+  }
+
+  let response, correctedData;
+  try {
+    if (appMode === 'real') {
+      const tool = {
+        name: 'record_event',
+        description: 'Record an event matching the requested schema.',
+        input_schema: schemaObj
+      };
+      response = await callClaude(
+        [{ role: 'user', content: d8State.retryPrompt }],
+        [tool],
+        { type: 'tool', name: 'record_event' }
+      );
+      const toolBlock = response.content.find(b => b.type === 'tool_use');
+      correctedData = toolBlock?.input;
+    } else {
+      await new Promise(r => setTimeout(r, 600));
+      response = D8_SIMULATED_RETRY;
+      correctedData = D8_SIMULATED_RETRY.content[0].input;
+    }
+  } catch (e) {
+    resultEl.className = 'result-pane failure';
+    resultEl.innerHTML = `<div class="result-head">✗ API error</div><div>${escapeHtml(e.message)}</div>`;
+    btn.disabled = false;
+    return;
+  }
+
+  // Validate the corrected response
+  const validation = await runValidation(schema, JSON.stringify(correctedData));
+
+  let html = `<div class="result-head">${appMode === 'real' ? '✓ Live corrected response' : '✓ Simulated corrected response'}</div>`;
+  html += `<div style="margin-bottom: 6px;">Corrected data:</div>`;
+  html += `<pre class="code" style="margin: 6px 0 14px;">${escapeHtml(JSON.stringify(correctedData, null, 2))}</pre>`;
+  if (validation.ok) {
+    html += `<div style="color: var(--good);">✓ Now passes validation.</div>`;
+  } else {
+    html += `<div style="color: var(--bad);">✗ Still failing:</div>`;
+    validation.errors.forEach(e => {
+      const pathStr = e.path.length === 0 ? '&lt;root&gt;' : e.path.map(p => String(p)).join('.');
+      html += `<div class="err-row"><span class="err-path">${escapeHtml(pathStr)}</span> <span class="err-msg">${escapeHtml(e.message)}</span></div>`;
+    });
+  }
+  resultEl.innerHTML = html;
+  btn.disabled = false;
+});
+
+// ===== Boot =====
+boot();
+</script>
+</body>
+</html>
