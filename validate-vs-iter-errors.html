@@ -1,0 +1,955 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>validate() vs iter_errors() — the demo that disproves the myth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fafaf7;
+    --ink: #1a1a1a;
+    --ink-soft: #4b4b4b;
+    --muted: #8a8a8a;
+    --rule: #e6e4dc;
+    --accent: #6d28d9;
+    --accent-soft: #ede9fe;
+    --accent-deep: #4c1d95;
+    --code-bg: #14121f;
+    --code-ink: #e8e6f0;
+    --code-muted: #8b85a8;
+    --code-key: #c4b5fd;
+    --code-str: #86efac;
+    --code-num: #fcd34d;
+    --code-com: #6b7280;
+    --good: #047857;
+    --bad: #b91c1c;
+    --bad-soft: #fef2f2;
+    --good-soft: #ecfdf5;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 64px 40px 120px;
+  }
+
+  /* ---- header ---- */
+  .eyebrow {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  h1 {
+    font-family: "Fraunces", serif;
+    font-weight: 800;
+    font-size: clamp(40px, 5.5vw, 64px);
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    margin: 0 0 20px;
+  }
+  h1 em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--accent);
+  }
+  .lede {
+    font-family: "Fraunces", serif;
+    font-size: 22px;
+    line-height: 1.45;
+    color: var(--ink-soft);
+    max-width: 720px;
+    margin: 0 0 48px;
+  }
+
+  /* ---- status bar ---- */
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: white;
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--accent);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    margin-bottom: 48px;
+  }
+  .status .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+  }
+  .status.loading .dot { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  .status.ready .dot { background: var(--good); }
+  .status.error .dot { background: var(--bad); }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.3); }
+  }
+
+  /* ---- section structure ---- */
+  section { margin-bottom: 80px; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 24px;
+    margin-bottom: 28px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .section-num {
+    font-family: "Fraunces", serif;
+    font-size: 56px;
+    font-weight: 400;
+    font-style: italic;
+    color: var(--accent);
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+  .section-title {
+    font-family: "Fraunces", serif;
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .section-sub {
+    color: var(--ink-soft);
+    font-size: 15px;
+    margin: 2px 0 0;
+  }
+
+  /* ---- code blocks ---- */
+  pre, code {
+    font-family: "JetBrains Mono", monospace;
+  }
+  pre.code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 22px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.7;
+    overflow-x: auto;
+    margin: 0;
+  }
+  pre.code .k { color: var(--code-key); }
+  pre.code .s { color: var(--code-str); }
+  pre.code .n { color: var(--code-num); }
+  pre.code .c { color: var(--code-com); font-style: italic; }
+
+  /* ---- editor ---- */
+  .editor-shell {
+    background: var(--code-bg);
+    border-radius: 6px;
+    padding: 22px 24px;
+    position: relative;
+  }
+  .editor-shell textarea {
+    width: 100%;
+    background: transparent;
+    color: var(--code-ink);
+    border: none;
+    outline: none;
+    resize: vertical;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 14px;
+    line-height: 1.7;
+    min-height: 140px;
+  }
+  .editor-toolbar {
+    display: flex;
+    gap: 12px;
+    margin-top: 18px;
+    align-items: center;
+  }
+  button {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  button.primary {
+    background: var(--accent);
+    color: white;
+  }
+  button.primary:hover { background: var(--accent-deep); }
+  button.primary:disabled {
+    background: var(--muted);
+    cursor: not-allowed;
+  }
+  button.ghost {
+    background: transparent;
+    color: var(--ink-soft);
+    border: 1px solid var(--rule);
+  }
+  button.ghost:hover { border-color: var(--ink-soft); color: var(--ink); }
+
+  .editor-hint {
+    margin-left: auto;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .editor-hint.invalid { color: var(--bad); }
+
+  /* ---- three-pane comparison ---- */
+  .triptych {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 900px) {
+    .triptych { grid-template-columns: 1fr; }
+  }
+  .pane {
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+  }
+  .pane-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .pane-title {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 0 0 4px;
+  }
+  .pane-tag {
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin: 0 0 18px;
+    font-style: italic;
+  }
+  .pane-body {
+    flex: 1;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink);
+  }
+  .pane-body .empty {
+    color: var(--muted);
+    font-style: italic;
+  }
+  .err-row {
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .err-row:last-child { border-bottom: none; }
+  .err-path {
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .err-msg {
+    color: var(--ink-soft);
+    display: block;
+    margin-top: 2px;
+  }
+  .err-meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .win-badge {
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  /* ---- relevance table ---- */
+  .rel-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    overflow: hidden;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 14px;
+  }
+  .rel-table th, .rel-table td {
+    padding: 14px 18px;
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+  }
+  .rel-table th {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .rel-table tr:last-child td { border-bottom: none; }
+  .rel-table tr.winner { background: var(--accent-soft); }
+  .rel-table tr.winner td:first-child { font-weight: 700; color: var(--accent-deep); }
+  .rel-table .check { color: var(--good); font-weight: 700; }
+
+  /* ---- lesson card ---- */
+  .lesson-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 800px) {
+    .lesson-grid { grid-template-columns: 1fr; }
+  }
+  .lesson-card {
+    padding: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--rule);
+  }
+  .lesson-card.wrong {
+    background: var(--bad-soft);
+    border-color: #fecaca;
+    border-left: 4px solid var(--bad);
+  }
+  .lesson-card.right {
+    background: var(--accent-soft);
+    border-color: #ddd6fe;
+    border-left: 4px solid var(--accent);
+  }
+  .lesson-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .lesson-card.wrong .lesson-label { color: var(--bad); }
+  .lesson-card.right .lesson-label { color: var(--accent); }
+  .lesson-card h3 {
+    font-family: "Fraunces", serif;
+    font-size: 22px;
+    margin: 0 0 16px;
+    font-weight: 600;
+  }
+  .lesson-card.wrong h3 { text-decoration: line-through; text-decoration-color: var(--bad); text-decoration-thickness: 2px; }
+  .lesson-card pre {
+    background: rgba(255,255,255,0.6);
+    padding: 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    margin: 0;
+    overflow-x: auto;
+  }
+  .lesson-card.wrong pre { text-decoration: line-through; text-decoration-color: var(--bad); opacity: 0.7; }
+  .lesson-card p { margin: 12px 0 0; font-size: 14px; color: var(--ink-soft); }
+
+  /* ---- receipts (collapsible) ---- */
+  details {
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 0;
+    margin-top: 16px;
+  }
+  details summary {
+    padding: 18px 24px;
+    cursor: pointer;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+    user-select: none;
+  }
+  details summary::marker { color: var(--accent); }
+  details[open] summary {
+    border-bottom: 1px solid var(--rule);
+  }
+  details .body {
+    padding: 20px 24px 24px;
+  }
+  details p {
+    font-size: 14px;
+    color: var(--ink-soft);
+    margin-top: 0;
+  }
+
+  /* ---- callouts ---- */
+  .callout {
+    background: white;
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--accent);
+    padding: 18px 22px;
+    margin: 24px 0;
+    font-size: 15px;
+    color: var(--ink-soft);
+  }
+  .callout strong { color: var(--ink); }
+
+  footer {
+    margin-top: 80px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="eyebrow">A teaching demo // jsonschema, Python</div>
+  <h1>The myth: <em>validate() raises the first error.</em></h1>
+  <p class="lede">It doesn't. It raises the one <code>best_match()</code> picks. This page runs the real <code>jsonschema</code> library in your browser to prove it, and shows you exactly why <code>title</code> wins.</p>
+
+  <div id="status" class="status loading">
+    <div class="dot"></div>
+    <span id="status-text">Booting Python (Pyodide)…</span>
+  </div>
+
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">01</div>
+      <div>
+        <h2 class="section-title">The schema</h2>
+        <p class="section-sub">Three independent rules. A payload can break all three at once.</p>
+      </div>
+    </div>
+<pre class="code"><span class="c"># learn_schemas.py</span>
+BOOK_SCHEMA = {
+    <span class="s">"type"</span>: <span class="s">"object"</span>,
+    <span class="s">"properties"</span>: {
+        <span class="s">"title"</span>:  {<span class="s">"type"</span>: <span class="s">"string"</span>},
+        <span class="s">"year"</span>:   {<span class="s">"type"</span>: <span class="s">"integer"</span>, <span class="s">"minimum"</span>: <span class="n">1500</span>, <span class="s">"maximum"</span>: <span class="n">2100</span>},
+        <span class="s">"rating"</span>: {<span class="s">"type"</span>: <span class="s">"integer"</span>, <span class="s">"minimum"</span>: <span class="n">1</span>,    <span class="s">"maximum"</span>: <span class="n">5</span>},
+    },
+    <span class="s">"required"</span>: [<span class="s">"title"</span>, <span class="s">"year"</span>, <span class="s">"rating"</span>],
+}</pre>
+    <div class="callout">
+      <strong>Why this schema matters.</strong> <code>required</code> sits at the root, so when it fires, the error's <code>path</code> is <code>[]</code>. <code>minimum</code> and <code>maximum</code> live inside properties, so their paths are <code>['year']</code> and <code>['rating']</code>. That path difference is the whole game.
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">02</div>
+      <div>
+        <h2 class="section-title">The payload</h2>
+        <p class="section-sub">Edit it. Break it differently. See what changes.</p>
+      </div>
+    </div>
+    <div class="editor-shell">
+      <textarea id="payload" spellcheck="false">{
+  "year": 1200,
+  "rating": 7
+}</textarea>
+      <div class="editor-toolbar">
+        <button id="run-btn" class="primary" disabled>Run validation</button>
+        <button id="reset-btn" class="ghost">Reset to default</button>
+        <span id="hint" class="editor-hint">JSON ok</span>
+      </div>
+    </div>
+    <div class="callout">
+      <strong>Default payload breaks three rules:</strong> <code>title</code> is missing, <code>year</code> is below 1500, <code>rating</code> is above 5. Try removing <code>year</code>, or setting <code>title</code> to <code>123</code> (wrong type), to see how the winner shifts.
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">03</div>
+      <div>
+        <h2 class="section-title">Three ways to validate, one payload</h2>
+        <p class="section-sub">Same input. Different outputs. Watch the difference.</p>
+      </div>
+    </div>
+    <div class="triptych">
+      <div class="pane">
+        <div class="pane-label">Module function</div>
+        <h3 class="pane-title">jsonschema.validate()</h3>
+        <p class="pane-tag">Internally calls best_match() over iter_errors. Raises ONE error.</p>
+        <div class="pane-body" id="pane-module"><span class="empty">Run validation to see output.</span></div>
+      </div>
+      <div class="pane">
+        <div class="pane-label">Instance method</div>
+        <h3 class="pane-title">validator.validate()</h3>
+        <p class="pane-tag">Raises the first error from iter_errors. No best_match.</p>
+        <div class="pane-body" id="pane-instance"><span class="empty">Run validation to see output.</span></div>
+      </div>
+      <div class="pane">
+        <div class="pane-label">Generator</div>
+        <h3 class="pane-title">iter_errors()</h3>
+        <p class="pane-tag">Yields every violation in schema-walk order.</p>
+        <div class="pane-body" id="pane-iter"><span class="empty">Run validation to see output.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">04</div>
+      <div>
+        <h2 class="section-title">Why <code>title</code> wins</h2>
+        <p class="section-sub">best_match's relevance key, computed live for each error.</p>
+      </div>
+    </div>
+    <div id="rel-container">
+      <p style="color: var(--muted); font-style: italic;">Run validation to see the relevance breakdown.</p>
+    </div>
+    <div class="callout">
+      <strong>The rule:</strong> best_match picks the error with the highest <code>(-len(path), validator not in {anyOf, oneOf})</code>. Shorter path wins. Root-level errors beat property-level errors. Iteration order is irrelevant.
+    </div>
+  </section>
+
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">05</div>
+      <div>
+        <h2 class="section-title">The receipts</h2>
+        <p class="section-sub">Run this yourself. Verify nothing here is invented.</p>
+      </div>
+    </div>
+
+    <details>
+      <summary>jsonschema.validate() source (from the library)</summary>
+      <div class="body">
+<pre class="code"><span class="c"># jsonschema/validators.py (simplified)</span>
+<span class="k">def</span> validate(instance, schema, cls=<span class="k">None</span>, *args, **kwargs):
+    <span class="k">if</span> cls <span class="k">is</span> <span class="k">None</span>:
+        cls = validator_for(schema)
+    cls.check_schema(schema)
+    validator = cls(schema, *args, **kwargs)
+    error = exceptions.best_match(validator.iter_errors(instance))
+    <span class="k">if</span> error <span class="k">is</span> <span class="k">not</span> <span class="k">None</span>:
+        <span class="k">raise</span> error</pre>
+        <p>The module-level function explicitly calls <code>best_match</code>. The instance method <code>validator.validate()</code> does NOT. That's the source of the confusion.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>best_match's relevance function (from jsonschema.exceptions)</summary>
+      <div class="body">
+<pre class="code"><span class="c"># jsonschema/exceptions.py (simplified)</span>
+WEAK_VALIDATORS = {<span class="s">"anyOf"</span>, <span class="s">"oneOf"</span>}
+
+<span class="k">def</span> relevance(error):
+    validator = error.validator
+    <span class="k">return</span> (
+        -<span class="k">len</span>(error.path),         <span class="c"># shorter path wins</span>
+        validator <span class="k">not</span> <span class="k">in</span> WEAK_VALIDATORS,  <span class="c"># non-disjunction wins</span>
+    )
+
+<span class="k">def</span> best_match(errors, key=relevance):
+    errors = <span class="k">iter</span>(errors)
+    best = <span class="k">next</span>(errors, <span class="k">None</span>)
+    <span class="k">if</span> best <span class="k">is</span> <span class="k">None</span>:
+        <span class="k">return</span>
+    <span class="k">for</span> error <span class="k">in</span> errors:
+        <span class="k">if</span> key(error) > key(best):
+            best = error
+    <span class="k">return</span> best</pre>
+      </div>
+    </details>
+
+    <details>
+      <summary>Falsifiable test: run this in your own terminal</summary>
+      <div class="body">
+        <p>If <code>validate()</code> really raised "the first error," this script would print the <code>year</code> error for both. It doesn't.</p>
+<pre class="code"><span class="k">import</span> jsonschema
+<span class="k">from</span> jsonschema.exceptions <span class="k">import</span> best_match, relevance
+
+BOOK_SCHEMA = {
+    <span class="s">"type"</span>: <span class="s">"object"</span>,
+    <span class="s">"properties"</span>: {
+        <span class="s">"title"</span>:  {<span class="s">"type"</span>: <span class="s">"string"</span>},
+        <span class="s">"year"</span>:   {<span class="s">"type"</span>: <span class="s">"integer"</span>, <span class="s">"minimum"</span>: <span class="n">1500</span>, <span class="s">"maximum"</span>: <span class="n">2100</span>},
+        <span class="s">"rating"</span>: {<span class="s">"type"</span>: <span class="s">"integer"</span>, <span class="s">"minimum"</span>: <span class="n">1</span>,    <span class="s">"maximum"</span>: <span class="n">5</span>},
+    },
+    <span class="s">"required"</span>: [<span class="s">"title"</span>, <span class="s">"year"</span>, <span class="s">"rating"</span>],
+}
+BAD_BOOK = {<span class="s">"year"</span>: <span class="n">1200</span>, <span class="s">"rating"</span>: <span class="n">7</span>}
+
+validator = jsonschema.Draft202012Validator(BOOK_SCHEMA)
+
+<span class="c"># Path A: module-level — uses best_match</span>
+<span class="k">try</span>:
+    jsonschema.validate(BAD_BOOK, BOOK_SCHEMA)
+<span class="k">except</span> jsonschema.ValidationError <span class="k">as</span> e:
+    <span class="k">print</span>(<span class="s">"module validate()  ->"</span>, e.message)
+
+<span class="c"># Path B: instance method — raises first from iter_errors</span>
+<span class="k">try</span>:
+    validator.validate(BAD_BOOK)
+<span class="k">except</span> jsonschema.ValidationError <span class="k">as</span> e:
+    <span class="k">print</span>(<span class="s">"instance validate()->"</span>, e.message)
+
+<span class="c"># Show the relevance scores</span>
+<span class="k">for</span> e <span class="k">in</span> validator.iter_errors(BAD_BOOK):
+    <span class="k">print</span>(<span class="k">f</span><span class="s">"path={list(e.absolute_path)!r:15} rel={relevance(e)}"</span>)</pre>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============================================================== -->
+  <section>
+    <div class="section-head">
+      <div class="section-num">06</div>
+      <div>
+        <h2 class="section-title">The lesson</h2>
+        <p class="section-sub">What students should walk away with.</p>
+      </div>
+    </div>
+    <div class="lesson-grid">
+      <div class="lesson-card wrong">
+        <div class="lesson-label">✗ The myth</div>
+        <h3>validate() raises the first error</h3>
+<pre>validate()    — first error, raises. Good for
+                retry loops where you want the
+                model to fix one thing at a time.</pre>
+        <p>Two errors in one sentence: it's not "first," and feeding errors one-at-a-time to an LLM retry loop multiplies your round trips.</p>
+      </div>
+      <div class="lesson-card right">
+        <div class="lesson-label">✓ The reality</div>
+        <h3>validate() raises one error chosen by best_match</h3>
+<pre>validate()    — raises ONE error chosen by
+                best_match (shortest path wins,
+                not iteration order). Use for
+                hard-fail boundaries: reject and stop.
+
+iter_errors() — yields every violation.
+                Use for LLM retry loops (feed
+                the full list back), UI, audit logs.
+
+is_valid()    — boolean only. Cheapest when
+                you only need yes/no.</pre>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Built for teaching. Real <code>jsonschema</code> running in your browser via Pyodide.
+    Press <code>F11</code> for projection. Reload to re-test.
+  </footer>
+</div>
+
+<!-- ============================================================== -->
+<!-- Pyodide + app logic                                              -->
+<!-- ============================================================== -->
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+  const statusEl = document.getElementById('status');
+  const statusText = document.getElementById('status-text');
+  const runBtn = document.getElementById('run-btn');
+  const resetBtn = document.getElementById('reset-btn');
+  const payloadEl = document.getElementById('payload');
+  const hintEl = document.getElementById('hint');
+  const paneModule = document.getElementById('pane-module');
+  const paneInstance = document.getElementById('pane-instance');
+  const paneIter = document.getElementById('pane-iter');
+  const relContainer = document.getElementById('rel-container');
+
+  const DEFAULT_PAYLOAD = `{\n  "year": 1200,\n  "rating": 7\n}`;
+
+  let pyodide = null;
+
+  function setStatus(cls, text) {
+    statusEl.className = 'status ' + cls;
+    statusText.textContent = text;
+  }
+
+  // Validate JSON syntax in the editor as the user types
+  function checkPayloadSyntax() {
+    try {
+      JSON.parse(payloadEl.value);
+      hintEl.textContent = 'JSON ok';
+      hintEl.classList.remove('invalid');
+      return true;
+    } catch (e) {
+      hintEl.textContent = 'invalid JSON';
+      hintEl.classList.add('invalid');
+      return false;
+    }
+  }
+  payloadEl.addEventListener('input', checkPayloadSyntax);
+
+  resetBtn.addEventListener('click', () => {
+    payloadEl.value = DEFAULT_PAYLOAD;
+    checkPayloadSyntax();
+  });
+
+  // ---- boot Pyodide and install jsonschema ----
+  async function boot() {
+    try {
+      setStatus('loading', 'Booting Python (Pyodide)…');
+      pyodide = await loadPyodide();
+
+      setStatus('loading', 'Installing jsonschema…');
+      await pyodide.loadPackage('micropip');
+      await pyodide.runPythonAsync(`
+import micropip
+await micropip.install('jsonschema')
+import jsonschema
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import best_match, relevance
+      `);
+
+      // pre-define the schema once
+      await pyodide.runPythonAsync(`
+BOOK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title":  {"type": "string"},
+        "year":   {"type": "integer", "minimum": 1500, "maximum": 2100},
+        "rating": {"type": "integer", "minimum": 1,    "maximum": 5},
+    },
+    "required": ["title", "year", "rating"],
+}
+_validator = Draft202012Validator(BOOK_SCHEMA)
+      `);
+
+      setStatus('ready', 'Python ready. jsonschema loaded. Click "Run validation".');
+      runBtn.disabled = false;
+      // auto-run on first ready
+      runValidation();
+    } catch (err) {
+      console.error(err);
+      setStatus('error', 'Failed to boot Python: ' + err.message);
+    }
+  }
+
+  // ---- run the three validations and render ----
+  async function runValidation() {
+    if (!pyodide) return;
+    if (!checkPayloadSyntax()) {
+      paneModule.innerHTML = '<span class="empty">Fix the JSON syntax first.</span>';
+      paneInstance.innerHTML = '<span class="empty">Fix the JSON syntax first.</span>';
+      paneIter.innerHTML = '<span class="empty">Fix the JSON syntax first.</span>';
+      relContainer.innerHTML = '';
+      return;
+    }
+
+    runBtn.disabled = true;
+    runBtn.textContent = 'Running…';
+
+    try {
+      const payloadJson = payloadEl.value;
+      pyodide.globals.set('_payload_json', payloadJson);
+
+      const pyCode = `
+import json
+import jsonschema
+
+payload = json.loads(_payload_json)
+
+result = {
+    'module_validate': None,
+    'instance_validate': None,
+    'iter_errors': [],
+    'best_match_winner_idx': None,
+}
+
+# Path 1: module-level validate (uses best_match)
+try:
+    jsonschema.validate(payload, BOOK_SCHEMA)
+    result['module_validate'] = {'ok': True}
+except jsonschema.ValidationError as e:
+    result['module_validate'] = {
+        'ok': False,
+        'path': list(e.absolute_path),
+        'validator': e.validator,
+        'message': e.message,
+    }
+
+# Path 2: instance method validate (raises first from iter_errors)
+try:
+    _validator.validate(payload)
+    result['instance_validate'] = {'ok': True}
+except jsonschema.ValidationError as e:
+    result['instance_validate'] = {
+        'ok': False,
+        'path': list(e.absolute_path),
+        'validator': e.validator,
+        'message': e.message,
+    }
+
+# Path 3: iter_errors (every violation, with relevance)
+all_errors = list(_validator.iter_errors(payload))
+for i, e in enumerate(all_errors):
+    rel = relevance(e)
+    result['iter_errors'].append({
+        'idx': i,
+        'path': list(e.absolute_path),
+        'validator': e.validator,
+        'message': e.message,
+        'neg_len_path': rel[0],
+        'non_weak': bool(rel[1]),
+    })
+
+# Compute which one best_match picks (max relevance)
+if all_errors:
+    best = best_match(iter(all_errors))
+    for i, e in enumerate(all_errors):
+        if e.message == best.message and list(e.absolute_path) == list(best.absolute_path):
+            result['best_match_winner_idx'] = i
+            break
+
+json.dumps(result)
+      `;
+
+      const resultStr = await pyodide.runPythonAsync(pyCode);
+      const result = JSON.parse(resultStr);
+      render(result);
+
+    } catch (err) {
+      console.error(err);
+      paneModule.innerHTML = '<span class="empty" style="color:var(--bad)">Python error: ' + err.message + '</span>';
+    } finally {
+      runBtn.disabled = false;
+      runBtn.textContent = 'Run validation';
+    }
+  }
+
+  // ---- render a single validate() pane (module or instance) ----
+  function renderValidatePane(el, data) {
+    if (data.ok) {
+      el.innerHTML = '<div style="color: var(--good); font-weight: 600;">✓ Validation passed</div>';
+      return;
+    }
+    const pathStr = data.path.length === 0 ? '&lt;root&gt;' : data.path.map(p => String(p)).join('.');
+    el.innerHTML = `
+      <div style="color: var(--bad); font-weight: 600; margin-bottom: 8px;">✗ ValidationError raised</div>
+      <div class="err-row">
+        <span class="err-path">${pathStr}</span>
+        <span class="err-meta">validator: ${data.validator}</span>
+        <span class="err-msg">${escape(data.message)}</span>
+      </div>
+    `;
+  }
+
+  // ---- render iter_errors pane ----
+  function renderIterPane(el, errors, winnerIdx) {
+    if (errors.length === 0) {
+      el.innerHTML = '<div style="color: var(--good); font-weight: 600;">✓ No violations</div>';
+      return;
+    }
+    let html = `<div style="color: var(--ink-soft); margin-bottom: 12px;">yielded <strong>${errors.length}</strong> ValidationError${errors.length === 1 ? '' : 's'}:</div>`;
+    errors.forEach((e, i) => {
+      const pathStr = e.path.length === 0 ? '&lt;root&gt;' : e.path.map(p => String(p)).join('.');
+      const winBadge = i === winnerIdx ? '<span class="win-badge">best_match</span>' : '';
+      html += `
+        <div class="err-row">
+          <span class="err-path">${pathStr}</span>${winBadge}
+          <span class="err-meta">validator: ${e.validator}</span>
+          <span class="err-msg">${escape(e.message)}</span>
+        </div>
+      `;
+    });
+    el.innerHTML = html;
+  }
+
+  // ---- render relevance breakdown table ----
+  function renderRelevance(errors, winnerIdx) {
+    if (errors.length === 0) {
+      relContainer.innerHTML = '<p style="color: var(--muted); font-style: italic;">No errors to rank — payload is valid.</p>';
+      return;
+    }
+    let html = `
+      <table class="rel-table">
+        <thead>
+          <tr>
+            <th>Error</th>
+            <th>path</th>
+            <th>-len(path)</th>
+            <th>non-disjunction</th>
+            <th>winner?</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    errors.forEach((e, i) => {
+      const pathStr = e.path.length === 0 ? '[]' : JSON.stringify(e.path);
+      const winnerCell = i === winnerIdx ? '<span class="check">✓ best_match</span>' : '';
+      const rowClass = i === winnerIdx ? 'winner' : '';
+      html += `
+        <tr class="${rowClass}">
+          <td>${e.validator}: ${truncate(escape(e.message), 60)}</td>
+          <td>${pathStr}</td>
+          <td>${e.neg_len_path}</td>
+          <td>${e.non_weak ? 'True' : 'False'}</td>
+          <td>${winnerCell}</td>
+        </tr>
+      `;
+    });
+    html += `</tbody></table>`;
+    relContainer.innerHTML = html;
+  }
+
+  function render(result) {
+    renderValidatePane(paneModule, result.module_validate);
+    renderValidatePane(paneInstance, result.instance_validate);
+    renderIterPane(paneIter, result.iter_errors, result.best_match_winner_idx);
+    renderRelevance(result.iter_errors, result.best_match_winner_idx);
+  }
+
+  function escape(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+  function truncate(s, n) {
+    return s.length > n ? s.slice(0, n) + '…' : s;
+  }
+
+  runBtn.addEventListener('click', runValidation);
+  payloadEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      runValidation();
+    }
+  });
+
+  boot();
+</script>
+</body>
+</html>
